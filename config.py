@@ -1,3 +1,9 @@
-TOKEN = "8943563769:AAHCxGr9UMNbp0U6ROPmSaa5_3nuKSrhr-I"
+import os
 
-BOT_NAME = "Fajenix Calculator"
+BOT_NAME = "Fajenix Calculator🧩"
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+
+CURRENCY_API_URL = "https://open.er-api.com/v6/latest/"
