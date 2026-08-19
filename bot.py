@@ -412,14 +412,20 @@ async def calculate_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Ignore ordinary conversation. Only attempt calculation when the
     # message has mathematical evidence.
-    looks_like_math = (
-        any(ch.isdigit() for ch in original_text)
-        or bool(
-            re.search(
-                r"\b(sin|cos|tan|asin|acos|atan|sqrt|log|ln|abs|round|pow|floor|ceil|factorial|fact)\b",
-                original_text.lower(),
-            )
+    math_function_pattern = (
+        r"\b(sin|cos|tan|asin|acos|atan|sqrt|log|ln|abs|round|pow|"
+        r"floor|ceil|factorial|fact)\b"
+    )
+
+    looks_like_math = bool(
+        re.fullmatch(r"[+-]?\d+(?:\.\d+)?", original_text)
+        or re.search(r"[+\-*/^×÷−]", original_text)
+        or re.search(math_function_pattern, original_text.lower())
+        or re.search(
+            r"\b\d+(?:\.\d+)?\s*%\s*of\s*\d+",
+            original_text.lower()
         )
+        or re.search(r"\b(pi|π|e)\b", original_text.lower())
     )
 
     if not looks_like_math:
