@@ -1,6 +1,6 @@
 import os
 
-BOT_NAME = "Fajenix Calculator🧩"
+BOT_NAME = "Fajenix Calculator"
 
 # Secrets are supplied through Railway Variables.
 BOT_TOKEN = os.getenv("BOT_TOKEN")

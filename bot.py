@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from telegram import Update
-from telegram.constants import ChatType
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -21,6 +20,13 @@ from config import (
     WEATHER_API_KEY,
 )
 from smart_calculator import calculate as smart_calculate
+from custom_emojis import emoji as ce
+
+
+def html_text(text):
+    """Escape dynamic text before placing it in Telegram HTML."""
+    from html import escape
+    return escape(str(text))
 
 
 # Comprehensive common-city/country aliases. The bot also accepts IANA
@@ -138,27 +144,31 @@ def get_weather(city):
 def weather_text(weather):
     visibility = ""
     if weather.get("visibility") is not None:
-        visibility = f"\n👁 Visibility: {weather['visibility'] / 1000:.1f} km"
+        visibility = f"\n{ce('visibility')} Visibility: {weather['visibility'] / 1000:.1f} km"
 
     pressure = ""
     if weather.get("pressure") is not None:
-        pressure = f"\n🧭 Pressure: {weather['pressure']} hPa"
+        pressure = f"\n{ce('pressure')} Pressure: {weather['pressure']} hPa"
 
     return (
-        f"🌤 Weather in {weather['city']}, {weather['country']}\n\n"
-        f"🌡 Temperature: {weather['temp']}°C\n"
-        f"🤒 Feels like: {weather['feels']}°C\n"
-        f"☁️ Condition: {weather['weather']}\n"
-        f"💧 Humidity: {weather['humidity']}%\n"
-        f"💨 Wind: {weather['wind']} m/s"
+        f"{ce('weather')} Weather in {html_text(weather['city'])}, {html_text(weather['country'])}\n\n"
+        f"{ce('temperature')} Temperature: {weather['temp']}°C\n"
+        f"{ce('feels')} Feels like: {weather['feels']}°C\n"
+        f"{ce('condition')} Condition: {html_text(weather['weather'])}\n"
+        f"{ce('humidity')} Humidity: {weather['humidity']}%\n"
+        f"{ce('wind')} Wind: {weather['wind']} m/s"
         f"{pressure}{visibility}"
     )
+
+async def reply_html(message, text, **kwargs):
+    kwargs.setdefault("parse_mode", "HTML")
+    await message.reply_text(text, **kwargs)
 
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text(
-            "🌤 Usage: /weather <city>\nExample: /weather Delhi"
+        await reply_html(update.message, 
+            f"{ce('globe')} Usage: /weather &lt;city&gt;\nExample: /weather Delhi"
         )
         return
 
@@ -169,18 +179,18 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     weather, error = get_weather(city)
 
     if error == "missing_key":
-        await update.message.reply_text(
-            "❌ Weather is not configured yet. Add WEATHER_API_KEY in Railway Variables."
+        await reply_html(update.message, 
+            f"{ce('error')} Weather is not configured yet. Add WEATHER_API_KEY in Railway Variables."
         )
         return
 
     if weather is None:
-        await update.message.reply_text(
-            "❌ I couldn't find that city or the weather service is unavailable."
+        await reply_html(update.message, 
+            f"{ce('error')} I couldn't find that city or the weather service is unavailable."
         )
         return
 
-    await update.message.reply_text(weather_text(weather))
+    await reply_html(update.message, weather_text(weather))
 
 
 def convert_currency(amount, from_currency, to_currency):
@@ -230,38 +240,17 @@ def parse_currency(text):
     return None
 
 
-async def currency_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 3 or context.args[1].lower() not in ("to", "in"):
-        await update.message.reply_text(
-            "💱 Usage: /convert 200 INR USD\nExample: /convert 200 INR USD"
-        )
-        return
-
-    try:
-        amount = float(context.args[0])
-    except ValueError:
-        await update.message.reply_text("❌ Invalid amount.")
-        return
-
-    from_currency = context.args[1] if context.args[1].lower() not in ("to", "in") else None
-    # Normal documented form: /convert 200 INR USD
-    if from_currency is None:
-        from_currency = context.args[0]
-        await update.message.reply_text("💱 Usage: /convert 200 INR USD")
-        return
-
-
 async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 3:
-        await update.message.reply_text(
-            "💱 Usage: /convert 200 INR USD"
+        await reply_html(update.message, 
+            f"{ce('currency')} Usage: /convert 200 INR USD"
         )
         return
 
     try:
         amount = float(context.args[0])
     except ValueError:
-        await update.message.reply_text("❌ Invalid amount.")
+        await reply_html(update.message, f"{ce('error')} Invalid amount.")
         return
 
     from_currency = context.args[1].upper()
@@ -270,13 +259,13 @@ async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = convert_currency(amount, from_currency, to_currency)
 
     if result is None:
-        await update.message.reply_text(
-            "❌ Conversion failed. Check the currency codes."
+        await reply_html(update.message, 
+            f"{ce('error')} Conversion failed. Check the currency codes."
         )
         return
 
-    await update.message.reply_text(
-        f"💱 {format_amount(amount)} {from_currency} = "
+    await reply_html(update.message, 
+        f"{ce('currency')} {format_amount(amount)} {from_currency} = "
         f"{format_amount(result)} {to_currency}"
     )
 
@@ -296,8 +285,8 @@ def resolve_timezone(location):
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text(
-            "🕐 Usage: /time <city/country/timezone>\n"
+        await reply_html(update.message, 
+            f"{ce('loading')} Usage: /time &lt;city/country/timezone&gt;\n"
             "Examples:\n"
             "/time India\n"
             "/time Tokyo\n"
@@ -309,8 +298,8 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     timezone_name = resolve_timezone(location)
 
     if timezone_name is None:
-        await update.message.reply_text(
-            "❌ I couldn't identify that timezone.\n"
+        await reply_html(update.message, 
+            f"{ce('error')} I couldn't identify that timezone.\n"
             "Try a major city/country or an IANA timezone such as Asia/Kolkata."
         )
         return
@@ -319,30 +308,30 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     offset = now.strftime("%z")
     offset = f"{offset[:3]}:{offset[3:]}" if len(offset) == 5 else offset
 
-    await update.message.reply_text(
-        f"🕐 Time: {location.title()}\n\n"
-        f"📅 {now.strftime('%A, %d %B %Y')}\n"
-        f"⏰ {now.strftime('%I:%M:%S %p')}\n"
-        f"🌍 Timezone: {timezone_name}\n"
-        f"🧭 UTC offset: {offset}"
+    await reply_html(update.message, 
+        f"{ce('loading')} Time: {html_text(location.title())}\n\n"
+        f"{ce('date')} {now.strftime('%A, %d %B %Y')}\n"
+        f"{ce('loading')} {now.strftime('%I:%M:%S %p')}\n"
+        f"{ce('timezone')} Timezone: {timezone_name}\n"
+        f"{ce('pressure')} UTC offset: {offset}"
     )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Welcome to Fajenix Calculator! 🧩\n\n"
-        "🧮 Advanced Calculator\n"
-        "🌤 Worldwide Weather\n"
-        "💱 Currency Converter\n"
-        "🕐 Worldwide Timezones\n\n"
+    await reply_html(update.message, 
+        f"{ce('bot_header')} <b>Welcome to Fajenix Calculator</b> {ce('branding')}\n\n"
+        f"{ce('calculator')} Advanced Calculator\n"
+        f"{ce('globe')} Worldwide Weather\n"
+        f"{ce('currency')} Currency Converter\n"
+        f"{ce('loading')} Worldwide Timezones\n\n"
         "Use /help for examples."
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 Fajenix Calculator — Commands\n\n"
-        "🧮 MATH\n"
+    await reply_html(update.message, 
+        f"{ce('bot_header')} <b>Fajenix Calculator — Commands</b> {ce('branding')}\n\n"
+        f"{ce('calculator')} <b>MATH</b>\n"
         "4+5\n"
         "2^10\n"
         "sin30°\n"
@@ -351,20 +340,54 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "sqrt(25)\n"
         "log(100)\n"
         "25% of 480\n\n"
-        "🌤 WEATHER\n"
+        f"{ce('weather')} <b>WEATHER</b>\n"
         "/weather Delhi\n"
         "/weather Tokyo\n\n"
-        "💱 CURRENCY\n"
+        f"{ce('currency')} <b>CURRENCY</b>\n"
         "200 INR to USD\n"
         "200 INR in USD\n"
         "How much is 200 INR in USD?\n"
         "/convert 200 INR USD\n\n"
-        "🕐 TIME\n"
+        f"{ce('loading')} <b>TIME</b>\n"
         "/time India\n"
         "/time Tokyo\n"
         "/time London\n"
         "/time America/New_York\n\n"
-        "💡 Normal chat messages are ignored."
+        f"{ce('profile')} /profile\n{ce('settings')} /settings\n{ce('premium')} /premium\n\n"
+        f"{ce('ignored')} Normal chat messages are ignored."
+    )
+
+
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    name = html_text(user.full_name if user else "User")
+    username = html_text(f"@{user.username}" if user and user.username else "Not set")
+    await reply_html(
+        update.message,
+        f"{ce('profile')} <b>Your Profile</b>\n\n"
+        f"Name: {name}\n"
+        f"Username: {username}\n"
+        f"{ce('premium')} Premium Emoji UI: Enabled"
+    )
+
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await reply_html(
+        update.message,
+        f"{ce('settings')} <b>Settings</b>\n\n"
+        f"{ce('calculator')} Calculator: Enabled\n"
+        f"{ce('currency')} Currency conversion: Enabled\n"
+        f"{ce('globe')} Weather: Enabled\n"
+        f"{ce('loading')} Timezones: Enabled\n"
+        f"{ce('premium')} Custom emoji UI: Enabled"
+    )
+
+
+async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await reply_html(
+        update.message,
+        f"{ce('premium')} <b>Fajenix Premium UI</b>\n\n"
+        "This bot uses Telegram custom emojis throughout its responses for a premium interface."
     )
 
 
@@ -382,15 +405,15 @@ async def calculate_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weather, error = get_weather(city)
 
         if error == "missing_key":
-            await update.message.reply_text(
-                "❌ Weather is not configured. Add WEATHER_API_KEY in Railway Variables."
+            await reply_html(update.message, 
+                f"{ce('error')} Weather is not configured. Add WEATHER_API_KEY in Railway Variables."
             )
         elif weather is None:
-            await update.message.reply_text(
-                "❌ I couldn't find that city or the weather service is unavailable."
+            await reply_html(update.message, 
+                f"{ce('error')} I couldn't find that city or the weather service is unavailable."
             )
         else:
-            await update.message.reply_text(weather_text(weather))
+            await reply_html(update.message, weather_text(weather))
         return
 
     # Natural currency request.
@@ -400,43 +423,69 @@ async def calculate_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = convert_currency(amount, from_currency, to_currency)
 
         if result is None:
-            await update.message.reply_text(
-                "❌ Conversion failed. Check the 3-letter currency codes."
+            await reply_html(update.message, 
+                f"{ce('error')} Conversion failed. Check the 3-letter currency codes."
             )
         else:
-            await update.message.reply_text(
-                f"💱 {format_amount(amount)} {from_currency} = "
+            await reply_html(update.message, 
+                f"{ce('currency')} {format_amount(amount)} {from_currency} = "
                 f"{format_amount(result)} {to_currency}"
             )
         return
 
-    # Ignore ordinary conversation. Only attempt calculation when the
-    # message has mathematical evidence.
-    math_function_pattern = (
-        r"\b(sin|cos|tan|asin|acos|atan|sqrt|log|ln|abs|round|pow|"
-        r"floor|ceil|factorial|fact)\b"
+    # Strict math-only gate. The ENTIRE message must consist only of
+    # calculator tokens. Ordinary conversation such as "Hello 7+8" or
+    # "how are you 5-7" is rejected before the calculator is called.
+    token_re = re.compile(
+        r"\s*(?:(?:\d+(?:\.\d+)?)|"
+        r"(?:asin|acos|atan|sqrt|log10|log|sin|cos|tan|ln|abs|round|floor|ceil|factorial|fact|pow|pi|e|of)|"
+        r"[+\-*/^%().,×÷−π°])",
+        re.IGNORECASE,
     )
 
-    looks_like_math = bool(
-        re.fullmatch(r"[+-]?\d+(?:\.\d+)?", original_text)
-        or re.search(r"[+\-*/^×÷−]", original_text)
-        or re.search(math_function_pattern, original_text.lower())
+    normalized = original_text.strip()
+    pos = 0
+    token_count = 0
+    while pos < len(normalized):
+        match = token_re.match(normalized, pos)
+        if not match:
+            return
+        pos = match.end()
+        token_count += 1
+
+    if token_count == 0:
+        return
+
+    # "of" is accepted only for the supported percentage form, e.g.
+    # "25% of 480". It must never make ordinary prose look mathematical.
+    if re.search(r"\bof\b", normalized, re.IGNORECASE):
+        if not re.fullmatch(
+            r"\s*\d+(?:\.\d+)?\s*%\s*of\s*\d+(?:\.\d+)?\s*",
+            normalized,
+            re.IGNORECASE,
+        ):
+            return
+
+    # Require actual numeric/constant/function content, not just operators.
+    has_math_token = bool(
+        re.search(r"\d", normalized)
+        or re.search(r"\b(?:pi|e)\b|π", normalized, re.IGNORECASE)
         or re.search(
-            r"\b\d+(?:\.\d+)?\s*%\s*of\s*\d+",
-            original_text.lower()
+            r"\b(?:asin|acos|atan|sqrt|log10|log|sin|cos|tan|ln|abs|round|floor|ceil|factorial|fact|pow)\b",
+            normalized,
+            re.IGNORECASE,
         )
-        or re.search(r"\b(pi|π|e)\b", original_text.lower())
     )
 
-    if not looks_like_math:
+    if not has_math_token:
         return
 
     try:
         result = smart_calculate(original_text)
-        await update.message.reply_text(f"⚡ Answer: {result}")
+        await reply_html(update.message, f"{ce('calculation')} <b>Answer:</b> {html_text(result)}")
     except Exception:
-        await update.message.reply_text(
-            "❌ Invalid expression.\n"
+        await reply_html(update.message, 
+            f"{ce('error')} Invalid expression.\n"
             "Try: 4+5, 2^10, sin30°, sqrt(25)"
         )
 
@@ -452,6 +501,9 @@ def main():
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("time", time_command))
     app.add_handler(CommandHandler("convert", convert_command))
+    app.add_handler(CommandHandler("profile", profile_command))
+    app.add_handler(CommandHandler("settings", settings_command))
+    app.add_handler(CommandHandler("premium", premium_command))
 
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_message)
